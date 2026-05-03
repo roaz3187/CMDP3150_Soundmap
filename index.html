@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CMDP 3150 - Boulder Sound Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@300;400&family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --stone:     #e8e0d4;
+      --parchment: #f4efe8;
+      --bark:      #5c4a32;
+      --sage:      #6b7c5c;
+      --moss:      #3d5040;
+      --clay:      #a0745a;
+      --sky:       #7da0b4;
+      --ink:       #2a2318;
+      --cream:     #faf7f2;
+      --dust:      #c9bfb0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: var(--parchment);
+      color: var(--ink);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    header {
+      position: relative;
+      z-index: 1000;
+      background: var(--moss);
+      padding: 14px 28px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+
+    header h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.55rem;
+      font-weight: 600;
+      color: var(--parchment);
+      letter-spacing: 0.02em;
+    }
+
+    header h1 span {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--dust);
+    }
+
+    header p.sub {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 300;
+      color: var(--dust);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-left: auto;
+    }
+
+    /* ── MAP ── */
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* ── CUSTOM MARKER ── */
+    .sound-marker {
+      width: 36px;
+      height: 36px;
+      background: var(--moss);
+      border: 2.5px solid var(--parchment);
+      border-radius: 50% 50% 50% 4px;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, background 0.2s ease;
+      cursor: pointer;
+    }
+
+    .sound-marker.playing {
+      background: var(--clay);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .sound-marker svg {
+      transform: rotate(45deg);
+      width: 16px;
+      height: 16px;
+      fill: var(--parchment);
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 2px 10px rgba(0,0,0,0.4), 0 0 0 0 rgba(160,116,90,0.6); }
+      50%       { box-shadow: 0 2px 10px rgba(0,0,0,0.4), 0 0 0 10px rgba(160,116,90,0); }
+    }
+
+    /* ── INFO PANEL ── */
+    #info-panel {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%) translateY(120%);
+      z-index: 1000;
+      width: min(480px, calc(100vw - 40px));
+      background: var(--cream);
+      border: 1px solid var(--dust);
+      border-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15);
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+      overflow: hidden;
+    }
+
+    #info-panel.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .panel-accent {
+      height: 4px;
+      background: linear-gradient(90deg, var(--moss), var(--sage), var(--clay));
+    }
+
+    .panel-body {
+      padding: 20px 24px 22px;
+    }
+
+    .panel-location {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--moss);
+      margin-bottom: 4px;
+    }
+
+    .panel-meta {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--clay);
+      margin-bottom: 14px;
+    }
+
+    .panel-description {
+      font-size: 0.88rem;
+      line-height: 1.65;
+      color: #4a3f30;
+      margin-bottom: 18px;
+    }
+
+    /* ── AUTHOR CARD ── */
+    .author-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--parchment);
+      border: 1px solid var(--dust);
+      border-radius: 3px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+
+    .author-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--sage);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: var(--parchment);
+      flex-shrink: 0;
+    }
+
+    .author-info {
+      flex: 1;
+    }
+
+    .author-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--bark);
+    }
+
+    .author-date {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--clay);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .author-role {
+      font-size: 0.78rem;
+      color: #7a6a55;
+      font-style: italic;
+      margin-top: 1px;
+    }
+
+    /* ── AUDIO PLAYER ── */
+    .audio-controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    #play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--moss);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    #play-btn:hover { background: var(--bark); transform: scale(1.06); }
+    #play-btn:active { transform: scale(0.97); }
+
+    #play-btn svg { fill: var(--parchment); width: 18px; height: 18px; }
+
+    .waveform-wrap {
+      flex: 1;
+      position: relative;
+      height: 36px;
+      cursor: pointer;
+    }
+
+    .waveform-bg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .waveform-bg .bar {
+      flex: 1;
+      background: var(--dust);
+      border-radius: 2px;
+      transition: background 0.15s;
+    }
+
+    .waveform-progress {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      clip-path: inset(0 100% 0 0);
+      transition: clip-path 0.1s linear;
+    }
+
+    .waveform-progress .bar {
+      flex: 1;
+      background: var(--clay);
+      border-radius: 2px;
+    }
+
+    .time-display {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--clay);
+      letter-spacing: 0.06em;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ── CLOSE BTN ── */
+    #close-btn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      color: var(--dust);
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 6px;
+      border-radius: 3px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    #close-btn:hover { color: var(--bark); background: var(--stone); }
+
+    /* ── LEGEND ── */
+    #legend {
+      position: absolute;
+      top: 80px;
+      right: 20px;
+      z-index: 999;
+      background: var(--cream);
+      border: 1px solid var(--dust);
+      border-radius: 3px;
+      padding: 12px 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+
+    #legend h4 {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--clay);
+      margin-bottom: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--bark);
+      margin-bottom: 6px;
+    }
+
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50% 50% 50% 2px;
+      transform: rotate(-45deg);
+      flex-shrink: 0;
+    }
+
+    .legend-dot.idle    { background: var(--moss); }
+    .legend-dot.active  { background: var(--clay); }
+
+    /* ── LEAFLET OVERRIDES ── */
+    .leaflet-container { font-family: 'Lora', serif; }
+
+    .leaflet-popup-content-wrapper {
+      background: var(--cream);
+      border-radius: 3px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+
+    .leaflet-popup-tip { background: var(--cream); }
+
+    /* Count badge */
+    #count-badge {
+      position: absolute;
+      top: 80px;
+      left: 20px;
+      z-index: 999;
+      background: var(--cream);
+      border: 1px solid var(--dust);
+      border-radius: 3px;
+      padding: 10px 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--bark);
+    }
+
+    #count-badge span {
+      font-size: 1.1rem;
+      font-family: 'Playfair Display', serif;
+      color: var(--moss);
+      font-weight: 600;
+      display: block;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CMDP 3150: Sonic Histories <span>Boulder Sound Map</span></h1>
+  <p class="sub">Field Recordings · Colorado · 40°N 105°W</p>
+</header>
+
+<div id="map"></div>
+
+<div id="count-badge">
+  <span id="recording-count">0</span>
+  recordings
+</div>
+
+<div id="legend">
+  <h4>Legend</h4>
+  <div class="legend-item">
+    <div class="legend-dot idle"></div> Recording site
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot active"></div> Now playing
+  </div>
+</div>
+
+<!-- Info / Player Panel -->
+<div id="info-panel">
+  <div class="panel-accent"></div>
+  <button id="close-btn" title="Close">✕</button>
+  <div class="panel-body">
+    <div class="panel-location" id="panel-location">—</div>
+    <div class="panel-meta" id="panel-meta">—</div>
+    <div class="panel-description" id="panel-description">—</div>
+
+    <div class="author-card">
+      <div class="author-avatar" id="author-avatar">—</div>
+      <div class="author-info">
+        <div class="author-name" id="author-name">—</div>
+        <div class="author-role" id="author-role">—</div>
+        <div class="author-date" id="author-date">—</div>
+      </div>
+    </div>
+
+    <div class="audio-controls">
+      <button id="play-btn" title="Play / Pause">
+        <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <div class="waveform-wrap" id="waveform-wrap">
+        <div class="waveform-bg" id="waveform-bg"></div>
+        <div class="waveform-progress" id="waveform-progress"></div>
+      </div>
+      <div class="time-display" id="time-display">0:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<script>
+// ─────────────────────────────────────────────
+//  RECORDING DATA
+//  Replace `audioUrl` values with real .mp3 links
+// ─────────────────────────────────────────────
+const recordings = [
+  {
+    id: 1,
+    location: "Pearl Street Mall",
+    lat: 40.01832632183941, 
+    lng:-105.27870201848056,
+    category: "Urban / People",
+    description: "",
+    audioUrl: "", //ADD URL!!!
+    duration: "5:01",
+    author: {name: "Sarah Matarelli", initials: "SM", role: "Student, field recordist", date: "April XX, 2026"}
+  },
+  {
+    id: 2,
+    location: "Downtown Bus Station",
+    lat: 40.01747154909211,
+    lng: -105.27675708363415,
+    category: "Urban / Traffic",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "6:05",
+    author: { name: "Charles Koehler", initials: "CK", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 3,
+    location: "Boulder Reservoir",
+    lat: 40.0716667°,
+    lng: -105.2286111°,
+    category: "Nature / Lake",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "9:09",
+    author: { name: "George Mercier", initials: "GM", role: "Student, field recordist", date: "April 26, 2026" }
+  },
+  {
+    id: 4,
+    location: "Mount Sanitas Trailhead",
+    lat: 40.02143357442059,
+    lng: -105.29567600128446,
+    category: "Nature / Wind",
+    description: "Walking along the trail.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "Mariah Rosensweig", initials: "MR", role: "Student, field recordist", date: "April 05, 2026" }
+  },
+  {
+    id: 5,
+    location: "Green Mountain Cemetery",
+    lat: 39.9944160020903, 
+    lng: -105.26480558355364,
+    category: "Nature / Calm",
+    description: "TBD TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "5:11",
+    author: { name: "Rhianna Cranston", initials: "RC", role: "Dancer teacher, graduate student, field recordist", date: "April 05, 2026" }
+  },
+  {
+    id: 6,
+    location: "Folsom Field",
+    lat: 40.00825575220042, 
+    lng: -105.26609296927344,
+    category: "Urban / Sports",
+    description: "Traffic sounds near the stadium.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "6:26",
+    author: { name: "Kettner Hunter", initials: "KH", role: "Student, field recordist", date: "April 06, 2026" }
+  },
+  {
+    id: 7,
+    location: "Gregory Canyon Trailhead",
+    lat: 39.9974386, 
+    lng: -105.2919847,
+    category: "Nature / Meadow",
+    description: "TBD TBD TBD.",
+    audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // ← replace with your .mp3 URL
+    duration: "10:08",
+    author: { name: "Tatum Novak", initials: "TV", role: "Sound artist & urban field recordist", date: "March XX, 2026" }
+  },
+  {
+    id: 8,
+    location: "Boulder Library",
+    lat: 40.01408552775427,
+    lng: -105.28149962477876,
+    category: "Urban / Social",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "George Mercier", initials: "GM", role: "Student, field recordist", date: "April 08, 2026" }
+  },
+  {
+    id: 9,
+    location: "Boulder Creek at Foothills Parkway",
+    lat: 40.016619762146235,
+    lng: -105.24159511211994,
+    category: "Urban / Traffic",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "5:01",
+    author: { name: "Jack Rittinger", initials: "JR", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 10,
+    location: "Foothills Trailhead",
+    lat: 40.07043649802277,
+    lng: -105.28234452832673,
+    category: "Nature / Path",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "Zachary Sirkus", initials: "ZS", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 11,
+    location: "Wonderland Lake Park",
+    lat: 40.049809787556214,
+    lng: -105.28292270445141,
+    category: "Water / Wind",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "12:11",
+    author: { name: "Bailey Karraker", initials: "BK", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 12,
+    location: "Baseline Road and Foothills Parkway",
+    lat: 40.000061801248535, 
+    lng: -105.232558470675,
+    category: "Urban / Traffic",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "5:48",
+    author: { name: "Ryder Weston", initials: "RW", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 13,
+    location: "Arapaho and 28th street",
+    lat: 40.01462950757537, 
+    lng: -105.25841365710475,
+    category: "Urban / Traffic",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "Brooklyn Karraker", initials: "BrK", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 14,
+    location: "NCAR Mesa Laboratory",
+    lat: 39.9775,
+    lng: -105.27665339,
+    category: "Nature / Meadow",
+    description: "TBD TBD TBD",
+    audioUrl: "", // <- add URL!!!
+    duration: "6:18",
+    author: { name: "Maxwell Majors", initials: "MM", role: "Student, field recordist", date: "April 07, 2026" }
+  },
+
+  {
+    id: 15,
+    location: "Fiske Planetarium",
+    lat: 40.00352784000381, 
+    lng: -105.2638003119576,
+    category: "Urban / People",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "Trevor Williams", initials: "TW", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 16,
+    location: "Boulder Foothills Hospital",
+    lat: 40.01632821192401, 
+    lng: -105.2348298016955,
+    category: "Research / Health",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "X:XX",
+    author: { name: "bailey Ponder", initials: "BP", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+  {
+    id: 17,
+    location: "Laboratory for Atmospheric and Space Physics",
+    lat: 40.009032730824664, 
+    lng: -105.24825900562722,
+    category: "Science / Research",
+    description: "TBD TBD TBD.",
+    audioUrl: "", // ← replace with your .mp3 URL
+    duration: "7:28",
+    author: { name: "Peter Kuligowski", initials: "", role: "Student, field recordist", date: "April XX, 2026" }
+  },
+];
+
+// ─────────────────────────────────────────────
+//  MAP SETUP
+// ─────────────────────────────────────────────
+const map = L.map('map', {
+  center: [40.015, -105.270],
+  zoom: 13,
+  zoomControl: false
+});
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// Soft, earthy tile layer
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 20
+}).addTo(map);
+
+// ─────────────────────────────────────────────
+//  WAVEFORM BARS
+// ─────────────────────────────────────────────
+const BAR_COUNT = 40;
+const bgEl   = document.getElementById('waveform-bg');
+const progEl = document.getElementById('waveform-progress');
+
+function buildWaveform(seed) {
+  bgEl.innerHTML = '';
+  progEl.innerHTML = '';
+  const heights = [];
+  let s = seed || 42;
+  function rng() { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; }
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const h = 20 + rng() * 80;
+    heights.push(h);
+    ['bg', 'prog'].forEach((type, ti) => {
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = h + '%';
+      (ti === 0 ? bgEl : progEl).appendChild(bar);
+    });
+  }
+}
+
+buildWaveform(1);
+
+// ─────────────────────────────────────────────
+//  AUDIO ENGINE
+// ─────────────────────────────────────────────
+let currentAudio  = null;
+let currentMarkEl = null;
+let currentRec    = null;
+
+const infoPanel   = document.getElementById('info-panel');
+const playBtn     = document.getElementById('play-btn');
+const playIcon    = document.getElementById('play-icon');
+const timeDisplay = document.getElementById('time-display');
+const wfWrap      = document.getElementById('waveform-wrap');
+
+const PLAY_SVG  = '<path d="M8 5v14l11-7z"/>';
+const PAUSE_SVG = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+
+function fmtTime(s) {
+  if (isNaN(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const ss = String(Math.floor(s % 60)).padStart(2, '0');
+  return `${m}:${ss}`;
+}
+
+function updateProgress() {
+  if (!currentAudio) return;
+  const pct = currentAudio.duration ? currentAudio.currentTime / currentAudio.duration : 0;
+  progEl.style.clipPath = `inset(0 ${(1 - pct) * 100}% 0 0)`;
+  timeDisplay.textContent = fmtTime(currentAudio.currentTime);
+}
+
+function stopCurrent() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  if (currentMarkEl) {
+    currentMarkEl.classList.remove('playing');
+    currentMarkEl = null;
+  }
+  playIcon.innerHTML = PLAY_SVG;
+  progEl.style.clipPath = 'inset(0 100% 0 0)';
+  timeDisplay.textContent = '0:00';
+}
+
+function playRecording(rec, markerEl) {
+  // If clicking same marker, toggle
+  if (currentRec && currentRec.id === rec.id) {
+    if (currentAudio && !currentAudio.paused) {
+      currentAudio.pause();
+      playIcon.innerHTML = PLAY_SVG;
+    } else if (currentAudio) {
+      currentAudio.play();
+      playIcon.innerHTML = PAUSE_SVG;
+    }
+    return;
+  }
+
+  stopCurrent();
+  currentRec = rec;
+  currentMarkEl = markerEl;
+
+  buildWaveform(rec.id * 137);
+  populatePanel(rec);
+  showPanel();
+
+  if (rec.audioUrl) {
+    const audio = new Audio(rec.audioUrl);
+    currentAudio = audio;
+    markerEl.classList.add('playing');
+    playIcon.innerHTML = PAUSE_SVG;
+
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('ended', () => {
+      stopCurrent();
+      progEl.style.clipPath = 'inset(0 100% 0 0)';
+    });
+    audio.play().catch(() => {
+      // Autoplay blocked or no audio file — just show the panel
+    });
+  } else {
+    // No audio URL yet — still show panel, mark as "no audio"
+    markerEl.classList.add('playing');
+    currentMarkEl = markerEl;
+    playIcon.innerHTML = PLAY_SVG;
+    timeDisplay.textContent = rec.duration || '—';
+  }
+}
+
+// Play/pause button
+playBtn.addEventListener('click', () => {
+  if (!currentAudio) return;
+  if (currentAudio.paused) {
+    currentAudio.play();
+    playIcon.innerHTML = PAUSE_SVG;
+  } else {
+    currentAudio.pause();
+    playIcon.innerHTML = PLAY_SVG;
+  }
+});
+
+// Scrub waveform
+wfWrap.addEventListener('click', (e) => {
+  if (!currentAudio || !currentAudio.duration) return;
+  const rect = wfWrap.getBoundingClientRect();
+  const pct  = (e.clientX - rect.left) / rect.width;
+  currentAudio.currentTime = pct * currentAudio.duration;
+  updateProgress();
+});
+
+// ─────────────────────────────────────────────
+//  PANEL
+// ─────────────────────────────────────────────
+function populatePanel(rec) {
+  document.getElementById('panel-location').textContent   = rec.location;
+  document.getElementById('panel-meta').textContent       = `${rec.category} · ${rec.duration}`;
+  document.getElementById('panel-description').textContent = rec.description;
+  document.getElementById('author-avatar').textContent    = rec.author.initials;
+  document.getElementById('author-name').textContent      = rec.author.name;
+  document.getElementById('author-role').textContent      = rec.author.role;
+  document.getElementById('author-date').textContent      = rec.author.date;
+}
+
+function showPanel() {
+  infoPanel.classList.add('visible');
+}
+
+function hidePanel() {
+  infoPanel.classList.remove('visible');
+  stopCurrent();
+  currentRec = null;
+}
+
+document.getElementById('close-btn').addEventListener('click', hidePanel);
+
+// ─────────────────────────────────────────────
+//  MARKERS
+// ─────────────────────────────────────────────
+document.getElementById('recording-count').textContent = recordings.length;
+
+recordings.forEach(rec => {
+  // Build custom div icon
+  const iconEl = document.createElement('div');
+  iconEl.className = 'sound-marker';
+  iconEl.innerHTML = `
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+    </svg>`;
+
+  const customIcon = L.divIcon({
+    html: iconEl.outerHTML,
+    className: '',
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -38]
+  });
+
+  const marker = L.marker([rec.lat, rec.lng], { icon: customIcon }).addTo(map);
+
+  // Get the actual DOM element after adding to map
+  marker.on('add', function() {
+    const el = this.getElement();
+    if (el) el.querySelector('.sound-marker').setAttribute('data-id', rec.id);
+  });
+
+  marker.on('click', function() {
+    const el = this.getElement();
+    const markerDiv = el ? el.querySelector('.sound-marker') : null;
+    playRecording(rec, markerDiv);
+  });
+});
+</script>
+</body>
+</html>
